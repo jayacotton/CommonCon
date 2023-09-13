@@ -1,0 +1,260 @@
+;
+;  The common console code is designed to support CP/M when running
+;  on Z80 platforms.  This includes Z80 Master and Z80 SBC FPGA 
+;  and Chameleon 8/16.
+;
+;  The CP/M bios code will simply make a jump to the Monitor code
+;  and allow the code to sort out the console.
+;
+;
+;  Included here is the console, aux, and printer.  
+;
+	jp	BEGIN		; off to the ZAPPLE monitor code.
+	jp	CONRch		; Console read routine.
+	jp	CONWch		; Console write routine.
+	jp	CONStat		; Console Status routine.
+	jp	AUXRch		; Aux port read.
+	jp	AUXWch		; Aux port write.
+	jp	AUXStat		; Aux Status.
+	jp	PRTWch		; PRT output routine.
+	jp	PRTStat		; PRT status routine.
+;
+; Each of the entry points will read the IOBYTE switch and
+; decode the switch as needed.
+;
+; The IOBYTE definition is changed from the default values
+IOBYTE	equ	0ffh
+;
+; XXX   PAACC
+;       |||||
+;       |||\-- Console select bits
+;       |\-----Aux select bits
+;       \------Prt select bits
+;   \----------TBD (for use by the MONITOR)
+;  
+COMCONM	equ	00000011b	; bit mask for each set of Logical Units 
+COMAUXM	equ	00001100b	
+COMPRTM	equ	00010000b	
+;
+; Reading the IOBYTE should be harmless if the switch is missing, we 
+; can reliably assume that the switch value is 0xff in all cases.
+; Therefor, arraign the default values to work with the most common
+; I/O selections.
+
+; assume that this code thrashes registers.
+;
+; To write a byte, put it in the c register.
+; To read a byte, expect it to be in the c register.
+; To read a status, expect it to be in the c register.
+;   status bits.  bit 0 = 1 is read ready.
+;		  bit 1 = 1 is write ready.
+;
+
+CONRch:          ; Console read routine.
+	in	a,(IOBYTE)	; get iobyte	
+	and	a,COMCONM	; mask my bits
+; save space and use this common code.
+SaveSp:	ld	hl,IODr 	; pointer to io table
+	ld	d,0		; clear d
+	add	a,a		; * 2
+	ld	e,a		; move to e
+	add	hl,de		; add index
+	ld	e,(hl)		; get low byte
+	inc	hl		; bump the pointer
+	ld	h,(hl)		; get the hi byte
+	ld	l,e		; fix hl
+	jp	(hl)		; off to the code.
+CONWch:          ; Console write routine.  000000xx
+	in	a,(IOBYTE)
+	and	a,COMCONM
+	add	a,4
+	jr	SaveSp
+CONStat:         ; Console Status routine. 000000xx
+	in	a,(IOBYTE)
+	and	a,COMCONM
+	add	a,8
+	jr	SaveSp
+AUXRch:          ; Aux port read.  0000xx00
+	in	a,(IOBYTE)
+	and	a,COMAUXM
+	srl	a		; normalize the index
+	srl	a
+	add	a,12
+	jr	SaveSp
+AUXWch:          ; Aux port write. 0000xx00
+	in	a,(IOBYTE)
+	and	a,COMAUXM
+	srl	a		; normalize the index
+	srl	a
+	add	a,16
+	jr	SaveSp
+AUXStat:         ; Aux Status.  0000xx00
+	in	a,(IOBYTE)
+	and	a,COMAUXM
+	srl	a		; normalize the index
+	srl	a
+	add	a,20
+	jr	SaveSp
+PRTWch:          ; PRT output routine.  000x0000
+	in	a,(IOBYTE)
+	and	a,COMPRTM
+	srl	a		; normalize the index
+	srl	a
+	srl	a
+	srl	a
+	add	a,24
+	jr	SaveSp
+PRTStat:         ; PRT status routine.  000x0000
+	in	a,(IOBYTE)
+	and	a,COMPRTM
+	srl	a		; normalize the index
+	srl	a
+	srl	a
+	srl	a
+	add	a,26
+	jr	SaveSp
+
+; this is a montonic list of io support routines.
+;			; crib to stay inside of 8bit math.
+IODr:	dw	SIO0Rch	;  0 
+	dw	USBRch	;  1 
+	dw	PropRch	;  2 
+	dw	VGARch	;  3
+; 
+	dw	SIO0Wch ;  4 
+	dw	USBWch  ;  5 
+	dw	PropWch ;  6 
+	dw	VGAWch	;  7 
+;
+	dw	SIO0Stat ; 8 
+	dw	USBStat  ; 9 
+	dw	PropStat ; 10 
+	dw	VGAStat  ; 11 
+; 
+	dw	SIO1Rch  ; 12 
+	dw	USBRch   ; 13 
+	dw	PropRch  ; 14 
+	dw	VGARch   ; 15 
+; 
+	dw	SIO1Wch  ; 16 
+	dw	USBWch   ; 17 
+	dw	PropWch  ; 18 
+	dw	VGAWch   ; 19 
+;
+	dw	SIO1Stat  ; 20 
+	dw	USBStat   ; 21 
+	dw	PropStat  ; 22 
+	dw	VGAStat   ; 23 
+; 
+	dw	SIO1Wch	  ; 24 
+	dw	PIOWch    ; 25 
+; 
+	dw	SIO1Stat  ; 26 
+	dw	PIOStat   ; 27 
+
+BCTL    EQU     0A0H      ;CHANNEL B CONTROL PORT ASSIGNMENTS OF 
+			  ; THE ZILOG SCC CHIP ;<--- Adjust as necessary,
+BDTA    EQU     0A2H      ;CHANNEL B DATA
+ACTL    EQU     0A1H      ;CHANNEL A CONTROL (MODEM_CTL_PORT)
+ADTA    EQU     0A3H      ;CHANNEL A DATA (MODEM_DATA_PORT)
+SIO0Rch:		; read a character from sio port 0 (console)
+	in	a,(ACTL)
+	and	a,1
+	jr	z,SIO0Rch
+	in	a,(ADTA)
+	ld	c,a
+	ret	
+SIO0Wch:
+	in	a,(ACTL)
+	and	a,4
+	jr	nz,SIO0Wch
+	ld	a,c
+	out	(ADTA),a
+	ret
+SIO0Stat:
+	in	a,(ACTL)
+	push	af
+	and	a,1
+	ld	c,a
+	pop	af
+	and	a,4
+	srl	a
+	add	a,c
+	ld	c,a
+	ret
+	
+; USB Read character 
+USB_DATA   EQU 0ACH  ;PORT ASSIGNEMENT FOR DLP-USB Controller chip
+USB_STATUS EQU 0AAH  ;Status port for USB port (Port C of 8255, bits 6,7)
+USB_RXE    EQU 80H   ;If Bit 7 = 0, data available to recieve by S-100 Computer 
+USBRch:		; USB is TBD
+USBWch:
+USBStat:
+	ret
+; PROPELLER CONSOLE_IO (OR SD SYSTEMS VIDIO BOARD) 
+; FOR CONSOLE INPUT & OUTPUT
+CONSOL_STATUS   EQU     0H
+CONSOL_IN       EQU     01H
+CONSOL_OUT      EQU     01H
+PropRch:				; Read a character from propellor
+	in	a,(CONSOL_STATUS)	; read the status regester
+	and	a,2			; check for input
+	jr	z,PropRch		; non yet
+	in	a,(CONSOL_IN)		; read a character
+	and	7fh			; clean it	
+	ld	c,a			; make a copy for down line
+	ret
+PropWch:				; Write a character to propellor
+	in	a,(CONSOL_STATUS)
+	and	a,4
+	jr	z,PropWch
+	ld	a,c
+	out	(CONSOL_OUT),a
+	ret
+PropStat:
+	in	a,(CONSOL_STATUS)
+	push	af
+	and	a,2
+	srl	a
+	ld	c,a
+	pop	af
+	and	a,4
+	srl	a
+	add	a,c
+	ld	c,a
+	ret	
+VGAWch:		; VGA is TBD
+VGARch:
+VGAStat:
+	ret
+SIO1Rch:		; read a character from sio port 0 (console)
+	in	a,(BCTL)
+	and	a,1
+	jr	z,SIO1Rch
+	in	a,(BDTA)
+	ld	c,a
+	ret	
+SIO1Wch:
+	in	a,(BCTL)
+	and	a,4
+	jr	nz,SIO1Wch
+	ld	a,c
+	out	(BDTA),a
+	ret
+SIO1Stat:
+	in	a,(BCTL)
+	push	af
+	and	a,1
+	ld	c,a
+	pop	af
+	and	a,4
+	srl	a
+	add	a,c
+	ld	c,a
+	ret
+; printer is TBD
+PIOWch:
+PIOStat:
+	ret
+BEGIN:
+	nop
