@@ -12,3 +12,4 @@ device (on the dual sio) and other devices that do USB.  The propellor I/O board
 and support for VGA device on the z80 fpga sbc and camelion 8/16.  VGA support may be available
 for other cards TBD.
 
+Adding build tools for this repo.  Note: these will only run on linux x86.
