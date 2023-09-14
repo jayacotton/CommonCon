@@ -1,0 +1,38 @@
+;
+;  common console functions
+;
+;  read a byte from a device 
+;  write a byte to a device
+;  get a status byte for a device
+;  load the boot loader from the selected device
+;
+;
+;  common console definition bits for io port selection
+;  etc.
+;
+;   bits 1 and 0		 - console device
+;  0	=  SIO0  byte i/o 
+;  1	=  USB   byte i/o 
+;  2	=  Propeller byte i/o 
+;  3	=  VGA   byte i/o 
+;
+;  Aux is commonly used that the physical layer transport for cp-net
+;  So it is advantageous to have the USB available on the aux channel
+;
+;   bits 3 and 2		- Aux device
+;  0	=  SIO1  byte i/o 
+;  1	=  USB   byte i/o
+;  2	=  Propeller byte i/o
+;  3	=  VGA   byte i/o
+;
+;  It should not be difficult to make the pio/sio1 ports read and write
+;  for the purpose of things other than a printer
+;   bit 4 			- Select printer device sio1 or pio
+;  0    =  PIO   print byte
+;  1    =  SIO1  print byte
+;
+;   bits 6 and 5		- select boot device
+;  0    =  CF card
+;  1    =  IDE port (hard disk)
+;  2    =  FLOPPY 
+;  3    =  SD card

@@ -18,6 +18,7 @@
 	jp	AUXStat		; Aux Status.
 	jp	PRTWch		; PRT output routine.
 	jp	PRTStat		; PRT status routine.
+	jp	BOOT		; boot from selected device
 ;
 ; Each of the entry points will read the IOBYTE switch and
 ; decode the switch as needed.
@@ -25,16 +26,19 @@
 ; The IOBYTE definition is changed from the default values
 IOBYTE	equ	0ffh
 ;
-; XXX   PAACC
-;       |||||
-;       |||\-- Console select bits
-;       |\-----Aux select bits
-;       \------Prt select bits
+; X   BBPAACC
+;     |||||||
+;     |||||\-- Console select bits
+;     |||\-----Aux select bits
+;     ||\------Prt select bits
+;     \--------Select boot device
 ;   \----------TBD (for use by the MONITOR)
 ;  
-COMCONM	equ	00000011b	; bit mask for each set of Logical Units 
-COMAUXM	equ	00001100b	
-COMPRTM	equ	00010000b	
+COMCONM	 equ	00000011b	; bit mask for each set of Logical Units 
+COMAUXM	 equ	00001100b	
+COMPRTM	 equ	00010000b	
+COMBOOTM equ	01100000b	; bit mask for selecting boot device.
+
 ;
 ; Reading the IOBYTE should be harmless if the switch is missing, we 
 ; can reliably assume that the switch value is 0xff in all cases.
@@ -151,6 +155,10 @@ IODr:	dw	SIO0Rch	;  0
 ; 
 	dw	SIO1Stat  ; 26 
 	dw	PIOStat   ; 27 
+;
+	dw	BOOTCF		; 28
+	dw	BOOTIDE		; 29
+	dw	BOOTFLOP	; 30 
 
 BCTL    EQU     0A0H      ;CHANNEL B CONTROL PORT ASSIGNMENTS OF 
 			  ; THE ZILOG SCC CHIP ;<--- Adjust as necessary,
@@ -256,5 +264,5 @@ SIO1Stat:
 PIOWch:
 PIOStat:
 	ret
-BEGIN:
+BEGIN:		; select cp/m boot device
 	nop
