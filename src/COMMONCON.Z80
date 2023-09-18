@@ -58,26 +58,31 @@ CONRch:          ; Console read routine.
 	in	a,(IOBYTE)	; get iobyte	
 	and	a,COMCONM	; mask my bits
 ; save space and use this common code.
-SaveSp:	ld	hl,IODr 	; pointer to io table
-	ld	d,0		; clear d
-	add	a,a		; * 2
-	ld	e,a		; move to e
-	add	hl,de		; add index
-	ld	e,(hl)		; get low byte
-	inc	hl		; bump the pointer
-	ld	h,(hl)		; get the hi byte
-	ld	l,e		; fix hl
-	jp	(hl)		; off to the code.
+SaveSp: ld	hl,IODr
+	push	hl		; load and save pointer table
+	ld	h,0
+	ld	l,a		; index
+	add	hl,hl		; index * 2
+	pop	de
+	add	hl,de		; add to pointer base
+	ld	e,(hl)		; fetch pointer to function
+	inc	hl
+	ld	h,(hl)
+	ld	l,e
+	jp	(hl)		; go there.
+
 CONWch:          ; Console write routine.  000000xx
 	in	a,(IOBYTE)
 	and	a,COMCONM
 	add	a,4
 	jr	SaveSp
+
 CONStat:         ; Console Status routine. 000000xx
 	in	a,(IOBYTE)
 	and	a,COMCONM
 	add	a,8
 	jr	SaveSp
+
 AUXRch:          ; Aux port read.  0000xx00
 	in	a,(IOBYTE)
 	and	a,COMAUXM
@@ -85,6 +90,7 @@ AUXRch:          ; Aux port read.  0000xx00
 	srl	a
 	add	a,12
 	jr	SaveSp
+
 AUXWch:          ; Aux port write. 0000xx00
 	in	a,(IOBYTE)
 	and	a,COMAUXM
@@ -92,6 +98,7 @@ AUXWch:          ; Aux port write. 0000xx00
 	srl	a
 	add	a,16
 	jr	SaveSp
+
 AUXStat:         ; Aux Status.  0000xx00
 	in	a,(IOBYTE)
 	and	a,COMAUXM
@@ -99,6 +106,7 @@ AUXStat:         ; Aux Status.  0000xx00
 	srl	a
 	add	a,20
 	jr	SaveSp
+
 PRTWch:          ; PRT output routine.  000x0000
 	in	a,(IOBYTE)
 	and	a,COMPRTM
@@ -108,6 +116,7 @@ PRTWch:          ; PRT output routine.  000x0000
 	srl	a
 	add	a,24
 	jr	SaveSp
+
 PRTStat:         ; PRT status routine.  000x0000
 	in	a,(IOBYTE)
 	and	a,COMPRTM
