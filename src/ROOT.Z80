@@ -1,0 +1,17 @@
+;
+;  Root ties all the code together into a single unit.
+;
+;  On power up, init averything and then go to the 
+;  selected boot device and load cp/m.
+;
+Base	equ	0f000h		; start address of boot loader code
+Stack	equ	0efffh		; start address of stack  256 bytes
+Patch	equ	0ef00h		; start address of patch area (if needed)
+	org	Base
+include COMMONCO.Z80
+Begin:	ld	sp,Stack
+	call	InitAll	; init enything that needs it.
+	jp	ColdBoot ; and boot cp/m from selected device
+;
+
+

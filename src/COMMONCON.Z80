@@ -9,7 +9,7 @@
 ;
 ;  Included here is the console, aux, and printer.  
 ;
-	jp	BEGIN		; off to the ZAPPLE monitor code.
+	jp	Begin		; startup boot loader.
 	jp	CONRch		; Console read routine.
 	jp	CONWch		; Console write routine.
 	jp	CONStat		; Console Status routine.
@@ -169,35 +169,35 @@ IODr:	dw	SIO0Rch	;  0
 	dw	BOOTIDE		; 29
 	dw	BOOTFLOP	; 30 
 
-BCTL    EQU     0A0H      ;CHANNEL B CONTROL PORT ASSIGNMENTS OF 
-			  ; THE ZILOG SCC CHIP ;<--- Adjust as necessary,
-BDTA    EQU     0A2H      ;CHANNEL B DATA
-ACTL    EQU     0A1H      ;CHANNEL A CONTROL (MODEM_CTL_PORT)
-ADTA    EQU     0A3H      ;CHANNEL A DATA (MODEM_DATA_PORT)
-SIO0Rch:		; read a character from sio port 0 (console)
-	in	a,(ACTL)
-	and	a,1
-	jr	z,SIO0Rch
-	in	a,(ADTA)
-	ld	c,a
+BCTL    EQU     0A0H      	;CHANNEL B CONTROL PORT ASSIGNMENTS OF 
+			  	; THE ZILOG SCC CHIP ;<--- Adjust as necessary,
+BDTA    EQU     0A2H      	;CHANNEL B DATA
+ACTL    EQU     0A1H      	;CHANNEL A CONTROL (MODEM_CTL_PORT)
+ADTA    EQU     0A3H      	;CHANNEL A DATA (MODEM_DATA_PORT)
+SIO0Rch:		  	; read a character from sio port 0 (console)
+	in	a,(ACTL)	; Read control port
+	and	a,1		; check for a character
+	jr	z,SIO0Rch	; No char, loop
+	in	a,(ADTA)	; Read a byte
+	ld	c,a		; put in c
 	ret	
-SIO0Wch:
-	in	a,(ACTL)
-	and	a,4
-	jr	nz,SIO0Wch
-	ld	a,c
-	out	(ADTA),a
+SIO0Wch:			; write a character to the sio port 0
+	in	a,(ACTL)	; read the control port
+	and	a,4		; check for empty
+	jr	nz,SIO0Wch	; not empty, loop
+	ld	a,c		; get my byte
+	out	(ADTA),a	; write it out
 	ret
-SIO0Stat:
-	in	a,(ACTL)
-	push	af
-	and	a,1
-	ld	c,a
-	pop	af
-	and	a,4
-	srl	a
-	add	a,c
-	ld	c,a
+SIO0Stat:			; get port 0 status
+	in	a,(ACTL)	; read the control reg
+	push	af		; save it
+	and	a,1		; check for input
+	ld	c,a		; save in c
+	pop	af		; get status back
+	and	a,4		; check for output
+	srl	a		; shift left
+	add	a,c		; combine status
+	ld	c,a		; save in c
 	ret
 	
 ; USB Read character 
@@ -222,13 +222,13 @@ PropRch:				; Read a character from propellor
 	ld	c,a			; make a copy for down line
 	ret
 PropWch:				; Write a character to propellor
-	in	a,(CONSOL_STATUS)
-	and	a,4
-	jr	z,PropWch
-	ld	a,c
-	out	(CONSOL_OUT),a
+	in	a,(CONSOL_STATUS)	; get status
+	and	a,4			; check for empty
+	jr	z,PropWch		; not empty, loop
+	ld	a,c			; get output char
+	out	(CONSOL_OUT),a		; write it to propellor
 	ret
-PropStat:
+PropStat:				; get propellor status
 	in	a,(CONSOL_STATUS)
 	push	af
 	and	a,2
@@ -240,25 +240,25 @@ PropStat:
 	add	a,c
 	ld	c,a
 	ret	
-VGAWch:		; VGA is TBD
-VGARch:
-VGAStat:
+VGAWch:		; write a char to VGA 
+VGARch:		; read a char from VGA
+VGAStat:	; Get vga status
 	ret
-SIO1Rch:		; read a character from sio port 0 (console)
+SIO1Rch:		; read a character from sio port 1 
 	in	a,(BCTL)
 	and	a,1
 	jr	z,SIO1Rch
 	in	a,(BDTA)
 	ld	c,a
 	ret	
-SIO1Wch:
+SIO1Wch:		; write a char to sio port 1
 	in	a,(BCTL)
 	and	a,4
 	jr	nz,SIO1Wch
 	ld	a,c
 	out	(BDTA),a
 	ret
-SIO1Stat:
+SIO1Stat:		; get status for sio port 1
 	in	a,(BCTL)
 	push	af
 	and	a,1
@@ -270,8 +270,14 @@ SIO1Stat:
 	ld	c,a
 	ret
 ; printer is TBD
-PIOWch:
-PIOStat:
+PIOWch:			; write a byte to printer
+PIOStat:		; get printer status
 	ret
-BEGIN:		; select cp/m boot device
+BOOTCF:
+BOOTIDE:
+BOOTFLOP:
+Begin:		; select cp/m boot device
+BOOT:
 	nop
+	halt
+	end
