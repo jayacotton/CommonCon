@@ -18,13 +18,10 @@
 	jp	AUXStat		; Aux Status.
 	jp	PRTWch		; PRT output routine.
 	jp	PRTStat		; PRT status routine.
-	jp	BOOT		; boot from selected device
+	jp	ColdBoot	; boot from selected device
 ;
 ; Each of the entry points will read the IOBYTE switch and
 ; decode the switch as needed.
-;
-; The IOBYTE definition is changed from the default values
-IOBYTE	equ	0ffh
 ;
 ; X   BBPAACC
 ;     |||||||
@@ -204,9 +201,31 @@ SIO0Stat:			; get port 0 status
 USB_DATA   EQU 0ACH  ;PORT ASSIGNEMENT FOR DLP-USB Controller chip
 USB_STATUS EQU 0AAH  ;Status port for USB port (Port C of 8255, bits 6,7)
 USB_RXE    EQU 80H   ;If Bit 7 = 0, data available to recieve by S-100 Computer 
-USBRch:		; USB is TBD
+USBRch:	
+	in	a,(USB_STATUS)
+	and	00000001b
+	jr	USBRch
+	in	a,(USB_DATA)
+	and	7fh		; this hurts xmodem /x0 mode
+	ret	
 USBWch:
+	in	a,(USB_STATUS)
+	and	00000010B
+	jr	nz,USBWch
+	ld	a,c
+	and	7fh		; this hurts xmodem send mode
+	out	(USB_DATA),a
+	ret
+
 USBStat:
+	in	a,(USB_STATUS)
+	and	00000001b
+	jr	z,NoCts
+	jr	GotCts
+NoCts:	xor	a
+	ret
+GotCts:	xor	a
+	dec	a
 	ret
 ; PROPELLER CONSOLE_IO (OR SD SYSTEMS VIDIO BOARD) 
 ; FOR CONSOLE INPUT & OUTPUT
@@ -274,10 +293,8 @@ PIOWch:			; write a byte to printer
 PIOStat:		; get printer status
 	ret
 BOOTCF:
+	jp	ColdBoot
 BOOTIDE:
+	ret
 BOOTFLOP:
-Begin:		; select cp/m boot device
-BOOT:
-	nop
-	halt
-	end
+	ret
