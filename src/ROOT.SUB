@@ -1,0 +1,11 @@
+R root.Z80
+R commoncon.z80
+R commonbit.z80
+R rootdef.z80
+Z80ASM root FH
+HEXCOM root
+W root.HEX
+W root.LST
+W root.COM
+
+
