@@ -15,7 +15,7 @@ for other cards TBD.
 Adding build tools for this repo.  Note: these will only run on linux x86.  For Windows you will
 need an altairz80.exe windows version file.
 
-The plan is morphed a bit.  My plan now is to make a support rom that has the drivers onboard
+The plan has morphed a bit.  My plan now is to make a support rom that has the drivers onboard
 and a boot loader to start up cp/m.  All the other MASTER.Z80 test code is left out for now.
 Once the boot loader is working on more than 1 machine I will start pulling in support code
 from MASTER.Z80
