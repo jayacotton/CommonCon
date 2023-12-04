@@ -1,17 +1,462 @@
-;
-;  Root ties all the code together into a single unit.
+;  Root basic boot loader.
 ;
 ;  On power up, init averything and then go to the 
 ;  selected boot device and load cp/m.
 ;
+include COMMONBI.Z80
+include ROOTDEF.Z80
 Base	equ	0f000h		; start address of boot loader code
-Stack	equ	0efffh		; start address of stack  256 bytes
+Stack	equ	0efdfh		; start address of stack  256 bytes
 Patch	equ	0ef00h		; start address of patch area (if needed)
+MyRam	equ	0efe0h		; driver storage for local parameters
+	org	MyRam
+@Sec	db	0
+@Dma	dw	0
+@Sector$Count db	0
+@Trk	dw	0
+@DriveTrk dw	0
+@DriveSec dw	0
+@DELAYStore dw	0
+
+
 	org	Base
 include COMMONCO.Z80
 Begin:	ld	sp,Stack
 	call	InitAll	; init enything that needs it.
+	call	DecPrt	; decode and print all the switch settings
 	jp	ColdBoot ; and boot cp/m from selected device
 ;
+;  Decode the IOBYTE switch settings and display a list of the
+;  values.  Useful for debugging switch setting.
+DecPrt:	equ	$
+	ret
+;
+; init all the stuff that matters.
+;  sio 
+;  usb
+;  ctc
+;  pio (for IDE drive)
+;  Floppy
+;  Time Keeper
+; At this time, I do not beleive the propellor board needs initialization.
+;  
+InitAll: equ	$
+	ld	a,00000000b
+	out	(DIAG_LEDS),a
+	call	InitSio
+	ld	a,00000001b
+	out	(DIAG_LEDS),a
+	call	InitUsb
+	ld	a,00000010b
+	out	(DIAG_LEDS),a
+	call	InitCtc
+	ld	a,00000011b
+	out	(DIAG_LEDS),a
+	call	InitPio
+	ld	a,00000100b
+	out	(DIAG_LEDS),a
+	Call	InitFlop
+	ld	a,00000101b
+	out	(DIAG_LEDS),a
+	call	InitTOD
+	ld	a,00000110b
+	out	(DIAG_LEDS),a
+	ret
+;
+; Init the SIO chips on the dual sio/usb board.
+;  Note: this should work even without the board present.
+;   i.e. no board, no fault
+;
+InitSio	equ	$
+	ld	a,10000000b
+	out	(DIAG_LEDS),a
+        LD      A,ACTL                  ;Program Channel A
+        LD      C,A
+        LD      B,0EH                   ;Byte count for OTIR below
+        LD      HL,SCCINIT_A
 
+	out	(DIAG_LEDS),a
+        LD      A,BCTL                  ;Program Channel B
+        LD      C,A
+        LD      B,0EH                   ;Byte count for OTIR below
+        LD      HL,SCCINIT_B
+        OTIR
+        RET
+SCCINIT_A:
+        DB      04H                     ;Point to WR4
+        DB      44H                     ;X16 clock,1 Stop,NP
+        DB      03H                     ;Point to WR3
+        DB      0C1H                    ;Enable reciever, Auto Enable, Recieve 8 bits   
+;       DB      0E1H                    ;Enable reciever, No Auto Enable, Recieve 8 bits (for CTS bit)  
+        DB      05H                     ;Point to WR5
+        DB      0EAH                    ;Enable, Transmit 8 bits
+        DB      0BH                     ;Set RTS,DTR, Enable. Point to WR11
+        DB      56H                     ;Recieve/transmit clock = BRG
+        DB      0CH                     ;Point to WR12
+        DB      02H                     ;Low byte 38,400 Baud <<<<<<<<<<< XModem I/O
+        DB      0DH                     ;Point to WR13
+        DB      00H                     ;High byte for Baud
+        DB      0EH                     ;Point to WR14
+        DB      01H                     ;Use 4.9152 MHz Clock. Note SD Systems uses a 2.4576 MHz clock, enable BRG
+        DB      0FH                     ;Point to WR15
+        DB      00H                     ;Generate Int with CTS going high
+
+SCCINIT_B:
+        DB      04H                     ;Point to WR4
+        DB      44H                     ;X16 clock,1 Stop,NP
+        DB      03H                     ;Point to WR3
+        DB      0C1H                    ;Enable reciever, Auto Enable, Recieve 8 bits   
+        DB      05H                     ;Point to WR5
+        DB      0EAH                    ;Enable, Transmit 8 bits
+        DB      0BH                     ;Set RTS,DTR, Enable. Point to WR11
+        DB      56H                     ;Recieve/transmit clock = BRG
+        DB      0CH                     ;Point to WR12
+        ;DB      06H                     ;Low byte 19,200 Baud <<<<<<<<<<< Note Speech synthizer defaults to this value
+        DB      02H                     ;Low byte 38,400 Baud <<<<<<<<<<< XModem I/O
+        DB      0DH                     ;Point to WR13
+        DB      00H                     ;High byte for Baud
+        DB      0EH                     ;Point to WR14
+        DB      01H                     ;Use 4.9152 MHz Clock. Note SD Systems uses a 2.4576 MHz clock, enable BRG
+        DB      0FH                     ;Point to WR15
+        DB      00H                     ;Generate Int with CTS going high
+	db	0,0,0
+	ret
+InitUsb	equ	$
+	ret
+InitCtc	equ	$
+	ret
+;
+; This could morph into init CF card reader
+; or maybe SD card reader.
+InitPio	equ	$
+IDEinit:			;Initilze the 8255 and drive then do a hard reset on the drive, 
+	ld	a,READcfg8255	;Config 8255 chip (10010010B), read mode on return
+	out	(IDEportCtrl),a	;Config 8255 chip, READ mode
+
+				;Hard reset the disk drive 
+				;For some reason some CF cards need to the RESET line 
+				;pulsed very carefully. You may need to play around   
+	ld	a,IDErstline	;with the pulse length. Symptoms are: incorrect data comming
+	out	(IDEportC),a	;back from a sector read (often due to the wrong sector being read)
+				;I have a (negative)pulse of 2.7uSec. (10Mz Z80, two IO wait states).
+	ld	b,20H		;Which seem to work for the 5 different CF cards I have.
+ResetDelay:
+	DEC     B
+	jp	nz,ResetDelay	;Delay (reset pulse width)
+
+	xor	A
+	out	(IDEportC),a	;No IDE control lines asserted (just bit 7 of port C)
+	call	DELAY$32
+
+	;**** A. Bingham - 7-April-2018 - from D. Fry ****
+	CALL	IDEwaitnotbusy
+	JP	C,InitError
+	;****
+
+	ld	d,11100000b	;Data for IDE SDH reg (512bytes, LBA mode,single drive,head 0000)
+				;For Trk,Sec,head (non LBA) use 10100000
+				;Note. Cannot get LBA mode to work with an old Seagate Medalist 6531 drive.
+				;have to use teh non-LBA mode. (Common for old hard disks).
+
+	ld	e,REGshd	;00001110,(0EH) for CS0,A2,A1,
+	call	IDEwr8D		;Write byte to select the MASTER device
+;
+	ld	b,0FFH		;<<< May need to adjust delay time for hard disks
+WaitInit:	
+	ld	e,REGstatus	;Get status after initialization
+	call	IDErd8D		;Check Status (info in [D])
+	ld	a,D
+	and	80H
+	jp	z,DoneInit	;Return if ready bit is zero
+	ld	a,2
+	call	DELAYX		;Long delay, drive has to get up to speed
+	DEC     B
+	jp	nz,WaitInit
+	call	SHOWerrors	;Ret with NZ flag set if error (probably no drive)
+	ret
+DoneInit:
+	xor	A
+	ret
+InitFlop	equ	$
+	ret
+InitTOD	equ	$
+	ret
+
+;
+; the boot loader is stubed out for CF card reader at this time.
+;  additional work is needed to allow boot from IDE disk, SD card
+;  and floppy drive.
+;
+ColdBoot:
+	ld	a,01010101b
+	out	(DIAG_LEDS),a
+	ld	a,0
+	out	(RAM_BANK),a
+; no need to init
+	ld	a,0
+	ld	(@Sec),a
+	xor	a
+	ld	(@Trk+1),a
+	ld	(@Trk),a
+	ld	a,CpmBootCount
+	ld	(@Sector$Count),a
+	ld	hl,CpmLdrAddress
+	ld	(@Dma),hl
+NextRCpm:
+	call	wrlba
+
+	ld      hl,(@Dma) 
+	call    ReadSector              ;read a sector
+	ld      (@DMA),hl
+
+	ld      a,(@Sector$Count)
+	DEC     A
+	ld      (@Sector$Count),a
+	jp      z,LoadDone
+
+	ld      hl,(@Sec)
+	inc     hl
+	ld      (@Sec),hl               ;Note we assume we alway will 
+					; stay on tarck 0 in this special case
+	jp      NextRCPM
+
+LoadDone:
+	ld      e,REGstatus             ;Check the R/W status when done
+	call    IDErd8D
+	BIT     0,D
+	jp      nz,CPMLoadErr           ;Z if no errors
+	ld      hl,CpmldrAddress
+	ld      a,(hl)
+	cp      31H                     ;EXPECT TO HAVE 31H @80H IE. LD SP,80H
+	jp      nz,CPMLoadErr1          ;Z if no errors
+	
+	IN      A,(DIAG_LEDS)
+	OR      A,00001000B             ;FLAG PROGRESS (Ready to go, 5 LED's On)
+	OUT     (DIAG_LEDS),A
+	jp      100H                    ;Now jump here where the code for the CPMLDR resides
+;
+DELAY$32: ld    a,40                    ;DELAY ~32 MS (DOES NOT SEEM TO BE CRITICAL)
+DELAY3: ld      b,0
+M0:     DJNZ    M0
+        DEC     A
+        jp      nz,DELAY3
+        ret
+;------------------------------------------------------------------
+; Low Level 8 bit R/W to the drive controller.  These are the routines that talk
+; directly to the drive controller registers, via the 8255 chip.  
+; Note the 16 bit I/O to the drive (which is only for SEC R/W) is done directly 
+; in the routines READSECTOR & WRITESECTOR for speed reasons.
+;
+IDErd8D:                                ;READ 8 bits from IDE register in [E], return info in [D]
+        ld      a,E
+        out     (IDEportC),a            ;drive address onto control lines
+
+        or      IDErdline               ;RD pulse pin (40H)
+        out     (IDEportC),a            ;assert read pin
+
+        in      a,(IDEportA)
+        ld      d,A                     ;return with data in [D]
+
+        ld      a,E                     ;<---Ken Robbins suggestion
+        out     (IDEportC),a            ;de-assert RD pin
+
+        xor     A
+        out     (IDEportC),a            ;Zero all port C lines
+        ret
+
+
+IDEwr8D:                                ;WRITE Data in [D] to IDE register in [E]
+        ld      a,WRITEcfg8255          ;Set 8255 to write mode
+        out     (IDEportCtrl),a
+
+        ld      a,D                     ;Get data put it in 8255 A port
+        out     (IDEportA),a
+
+        ld      a,E                     ;select IDE register
+        out     (IDEportC),a
+
+        or      IDEwrline               ;lower WR line
+        out     (IDEportC),a
+
+        ld      a,E                     ;<-- Ken Robbins suggestion, raise WR line
+        out     (IDEportC),a            ;de-assert RD pin
+
+        xor     A                       ;Deselect all lines including WR line
+        out     (IDEportC),a
+
+        ld      a,READcfg8255           ;Config 8255 chip, read mode on return
+        out     (IDEportCtrl),a
+        ret
+wrlba:                                  ;Write the logical block address to the drive's registers
+                                        ;Note we do not need to set the upper nibble of the LBA
+                                        ;It will always be 0 for these small drives
+        ld      a,(@Sec)                ;LBA mode Low sectors go directly
+        inc     A                       ;Sectors are numbered 1 -- MAXSEC (even in LBA mode)
+        ld      (@DriveSec),a          ;For Diagnostic Display Only
+        ld      d,A
+        ld      e,REGsector             ;Send info to drive
+        call    IDEwr8D                 ;Note: For drive we will have 0 - MAXSEC sectors only
+
+        ld      hl,(@Trk)
+        ld      a,L
+        ld      (@DriveTrk),a
+        ld      d,L                     ;Send Low TRK#
+        ld      e,REGcylinderLSB
+        call    IDEwr8D
+
+        ld      a,H
+        ld      (@DriveTrk+1),a
+        ld      d,H                     ;Send High TRK#
+        ld      e,REGcylinderMSB
+        call    IDEwr8D
+
+        ld      d,1                     ;For now, one sector at a time
+        ld      e,REGseccnt
+        call    IDEwr8D
+        ret
+                                        ;Read a sector, specified by the 3 bytes in LBA
+                                        ;Z on success, NZ call error routine if problem
+ReadSector:
+        call    wrlba                   ;Tell which sector we want to read from.
+                                        ;Note: Translate first in case of an error otherwise we 
+                                        ;will get stuck on bad sector 
+        call    IDEwaitnotbusy          ;make sure drive is ready
+        jp      c,SHOWerrors            ;Returned with NZ set if error
+
+        ld      d,COMMANDread
+        ld      e,REGcommand
+        call    IDEwr8D                 ;Send sec read command to drive.
+        call    IDEwaitdrq              ;wait until it's got the data
+        jp      c,SHOWerrors
+
+        LD      HL,(@DMA)               ;DMA address
+        ld      b,0                     ;Read 512 bytes to [HL] (256X2 bytes)
+MoreRD16:
+        ld      a,REGdata               ;REG register address
+        out     (IDEportC),a
+
+        or      IDErdline               ;08H+40H, Pulse RD line
+        out     (IDEportC),a
+
+        in      a,(IDEportA)            ;Read the lower byte first (Note very early versions had high byte then low byte
+        ld      (hl),A                  ;this made sector data incompatible with other controllers).
+        inc     hl
+        in      a,(IDEportB)            ;THEN read the upper byte
+        ld      (hl),A
+        inc     hl
+
+        ld      a,REGdata               ;De-assert RD line
+        out     (IDEportC),a
+        DJNZ    MoreRD16
+
+        ld      e,REGstatus
+        call    IDErd8D
+        ld      a,D
+        and     1H
+        call    nz,SHOWerrors           ;If error display status
+        ret
+
+IDEwaitnotbusy:                         ;ie Drive READY if 01000000
+        ld      b,0FFH
+        ld      a,0FFH                  ;Delay, must be above 80H for 4MHz Z80. Leave longer for slower drives
+        ld      (@DELAYStore),a
+
+MoreWait:
+        ld      e,REGstatus             ;wait for RDY bit to be set
+        call    IDErd8D 
+        ld      a,D
+        and     11000000B
+        xor     01000000B
+        jp      z,DoneNotbusy
+        DEC     B
+        jp      nz,MoreWait
+        ld      a,(@DELAYStore)         ;Check timeout delay
+        DEC     A
+        ld      (@DELAYStore),a
+        jp      nz,MoreWait
+        scf                             ;Set carry to indicate an error
+        ret
+DoneNotBusy:
+        or      A                       ;Clear carry it indicate no error
+        ret
+ABORT:	halt
+InitError:
+        LD DE,INIT$ERROR
+        CALL PSTRING
+        JP ABORT
+;       Print a string in [DE] up to '$'
+
+PSTRING:
+        push    bc
+        push    de
+        push    hl
+        ex      de,hl
+PSTRX:  ld      a,(hl)
+        cp      '$'
+        jp      z,DONEP
+        ld      c,A
+        call   	CONWch 
+        inc     hl
+        jp      PSTRX
+DONEP:  pop     hl
+        pop     de
+        pop     bc
+        ret
+
+DELAYX: ld      (@DELAYStore),a
+        push    bc
+        ld      bc,0FFFFH               ;<<< May need to adjust delay time to allow cold drive to
+DELAY2: ld      a,(@DELAYStore)         ;get up to speed.
+DELAY1: DEC     A
+        jp      nz,DELAY1
+        dec     bc
+        ld      a,C
+        or      B
+        jp      nz,DELAY2
+        pop     bc
+        ret
+SHOWerrors:
+	or	a
+	scf
+	ret
+CPMLoadErr1:
+        ld      de,CPM$ERROR1           ;Drive data error
+        call    PSTRING
+        jp      ABORT
+CPMLoadErr:
+        ld      de,CPM$ERROR            ;Drive Read Error
+        call    PSTRING
+        jp      ABORT
+
+                                        ;Wait for the drive to be ready to transfer data.
+                                        ;Returns the drive's status in Acc
+IDEwaitdrq:
+        ld      b,0FFH
+        ld      a,0FFH                  ;Delay, must be above 80H for 4MHz Z80. Leave longer for slower drives
+        ld      (@DELAYStore),a
+
+MoreDRQ:
+        ld      e,REGstatus             ;wait for DRQ bit to be set
+        call    IDErd8D
+        ld      a,D
+        and     10001000B
+        cp      00001000B
+        jp      z,DoneDRQ
+        DEC     B
+        jp      nz,MoreDRQ
+        ld      a,(@DELAYStore)         ;Check timeout delay
+        DEC     A
+        ld      (@DELAYStore),a
+        jp      nz,MoreDRQ
+        scf                             ;Set carry to indicate error
+        ret
+DoneDRQ:
+        or      A                       ;Clear carry
+        ret
+INIT$ERROR:
+	db	'INIT. DRIVE ERROR.',CR,LF,'$'
+CPM$ERROR:       
+	DB      CR,LF,'Error reading CPMLDR.',CR,LF,'$'
+CPM$ERROR1:      
+	DB      CR,LF,'Data error reading CPMLDR.',CR,LF,'$'
 
